@@ -150,3 +150,7 @@ Recommended schedule:
   - Trusted-source collection strategy documented
   - Date-range monthly workflow standardized
   - Output and review process defined
+- **2026-02-13 (security hardening update)**
+  - Added atomic file write strategy for report/DB outputs
+  - Added strict source URL allowlist in collector fetch path
+  - Added security utility module (`security_utils.py`) for safer writes/locking
