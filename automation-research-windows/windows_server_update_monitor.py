@@ -35,6 +35,8 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 from urllib.request import Request, urlopen
 
+from security_utils import atomic_write_json, atomic_write_text
+
 RELEASE_INFO_URL = "https://learn.microsoft.com/en-us/windows/release-health/windows-server-release-info"
 UA = "Mozilla/5.0 (compatible; WindowsUpdateMonitor/1.0)"
 
@@ -61,6 +63,8 @@ class UpdateInfo:
 
 
 def fetch(url: str) -> str:
+    if not (url.startswith("https://learn.microsoft.com/") or url.startswith("https://support.microsoft.com/")):
+        raise ValueError(f"허용되지 않은 수집 URL: {url}")
     req = Request(url, headers={"User-Agent": UA})
     with urlopen(req, timeout=25) as r:
         return r.read().decode("utf-8", errors="ignore")
@@ -275,7 +279,7 @@ def merge_patch_db(version: str, items: List[UpdateInfo], outdir: Path) -> Path:
 
     merged = list(index.values())
     merged.sort(key=lambda x: x.get("release_date", ""), reverse=True)
-    db_path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(db_path, merged, mode=0o600, ensure_ascii=False, indent=2)
     return db_path
 
 
@@ -284,7 +288,7 @@ def write_batch_advisories(version: str, items: List[UpdateInfo], outdir: Path) 
     batch_dir.mkdir(parents=True, exist_ok=True)
     for x in items:
         fname = f"KB{x.kb}_{x.release_date}.json" if x.kb else f"UNKNOWN_{x.release_date}.json"
-        (batch_dir / fname).write_text(json.dumps(asdict(x), ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_json(batch_dir / fname, asdict(x), mode=0o600, ensure_ascii=False, indent=2)
     return batch_dir
 
 
@@ -296,7 +300,7 @@ def write_outputs(items: List[UpdateInfo], version: str, outdir: Path, start_dt:
     md_path = outdir / f"ws{version}_updates_{stamp}.md"
     latest_md = outdir / f"ws{version}_updates_latest.md"
 
-    json_path.write_text(json.dumps([asdict(x) for x in items], ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(json_path, [asdict(x) for x in items], mode=0o600, ensure_ascii=False, indent=2)
     db_path = merge_patch_db(version, items, outdir)
     batch_dir = write_batch_advisories(version, items, outdir)
 
@@ -329,8 +333,8 @@ def write_outputs(items: List[UpdateInfo], version: str, outdir: Path, start_dt:
         lines += [f"  - {h}" for h in x.highlights] if x.highlights else ["  - (추출된 항목 없음)"]
 
     content = "\n".join(lines) + "\n"
-    md_path.write_text(content, encoding="utf-8")
-    latest_md.write_text(content, encoding="utf-8")
+    atomic_write_text(md_path, content, mode=0o600)
+    atomic_write_text(latest_md, content, mode=0o600)
 
     print(f"완료: {md_path}")
     print(f"완료: {json_path}")
